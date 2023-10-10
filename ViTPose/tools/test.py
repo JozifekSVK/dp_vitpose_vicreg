@@ -92,6 +92,16 @@ def main():
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
 
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        device_str = "cuda"
+        print(f"Pytorch version: {torch.__version__}")
+        print(f"Device name: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device("cpu")
+        device_str = "cpu"
+        print("No GPU available.")
+
     # set multi-process settings
     setup_multi_processes(cfg)
 
@@ -147,10 +157,11 @@ def main():
 
     # build the model and load checkpoint
     model = build_posenet(cfg.model)
+    model.to(device)
     fp16_cfg = cfg.get('fp16', None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
-    load_checkpoint(model, args.checkpoint, map_location='cpu')
+    load_checkpoint(model, args.checkpoint, map_location=device_str)
 
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)

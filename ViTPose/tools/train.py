@@ -136,6 +136,17 @@ def main():
         _, world_size = get_dist_info()
         cfg.gpu_ids = range(world_size)
 
+    
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        device_str = "cuda"
+        print(f"Pytorch version: {torch.__version__}")
+        print(f"Device name: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device("cpu")
+        device_str = "cpu"
+        print("No GPU available.")
+    
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
     # init the logger before other steps
@@ -155,8 +166,8 @@ def main():
     meta['env_info'] = env_info
 
     # log some basic info
-    logger.info(f'Distributed training: {distributed}')
-    logger.info(f'Config:\n{cfg.pretty_text}')
+    # logger.info(f'Distributed training: {distributed}')
+    # logger.info(f'Config:\n{cfg.pretty_text}')
 
     # set random seeds
     seed = init_random_seed(args.seed)
@@ -167,7 +178,7 @@ def main():
     meta['seed'] = seed
 
     model = build_posenet(cfg.model)
-    load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location='cpu')
+    load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location=device_str)
     datasets = [build_dataset(cfg.data.train)]
 
     if len(cfg.workflow) == 2:
@@ -182,6 +193,9 @@ def main():
             mmpose_version=__version__ + get_git_hash(digits=7),
             config=cfg.pretty_text,
         )
+
+    
+    model.to(device)
     train_model(
         model,
         datasets,
