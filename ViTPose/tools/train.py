@@ -9,7 +9,7 @@ import warnings
 import mmcv
 import torch
 from mmcv import Config, DictAction
-from mmcv.runner import get_dist_info, init_dist, set_random_seed
+from mmcv.runner import get_dist_info, init_dist, set_random_seed, load_checkpoint
 from mmcv.utils import get_git_hash
 
 from mmpose import __version__
@@ -167,6 +167,7 @@ def main():
     meta['seed'] = seed
 
     model = build_posenet(cfg.model)
+    load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location='cpu')
     datasets = [build_dataset(cfg.data.train)]
 
     if len(cfg.workflow) == 2:
