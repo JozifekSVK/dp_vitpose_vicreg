@@ -86,7 +86,6 @@ class TopDown(BasePose):
             self.neck.init_weights()
         if self.with_keypoint:
             self.keypoint_head.init_weights()
-
     @auto_fp16(apply_to=('img', ))
     def forward(self,
                 img,
@@ -162,13 +161,19 @@ class TopDown(BasePose):
 
     def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
         """Defines the computation performed at every call when testing."""
+        
+        
+        if type(img_metas) != list:
+            img_metas = img_metas.data[0]
+        
+
         assert img.size(0) == len(img_metas)
         batch_size, _, img_height, img_width = img.shape
         if batch_size > 1:
             assert 'bbox_id' in img_metas[0]
 
         result = {}
-
+        
         features = self.backbone(img)
         if self.with_neck:
             features = self.neck(features)

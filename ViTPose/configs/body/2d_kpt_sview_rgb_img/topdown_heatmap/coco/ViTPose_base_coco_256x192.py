@@ -2,7 +2,7 @@ _base_ = [
     '../../../../_base_/default_runtime.py',
     '../../../../_base_/datasets/coco.py'
 ]
-evaluation = dict(interval=10, metric='mAP', save_best='AP')
+evaluation = dict(interval=1, metric='mAP', save_best='AP')
 
 optimizer = dict(type='AdamW', lr=5e-4, betas=(0.9, 0.999), weight_decay=0.1,
                  constructor='LayerDecayOptimizerConstructor', 
@@ -24,7 +24,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=1., norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=10,
     warmup_ratio=0.001,
     step=[170, 200])
 total_epochs = 210
@@ -42,7 +42,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained=None,
+    pretrained='/Users/timotejkralik/Documents/Osobne/school/DP_pose_estimation/downloaded_models/vitpose-b.pth',
     backbone=dict(
         type='ViT',
         img_size=(256, 192),
@@ -139,12 +139,12 @@ val_pipeline = [
 
 test_pipeline = val_pipeline
 
-data_root = '/content/drive/MyDrive/DP_pose_estimation/Dataset/COCO_dataset'
+data_root = 'COCO_dataset'
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=8,
     workers_per_gpu=4,
-    val_dataloader=dict(samples_per_gpu=32),
-    test_dataloader=dict(samples_per_gpu=32),
+    val_dataloader=dict(samples_per_gpu=8),
+    test_dataloader=dict(samples_per_gpu=8),
     train=dict(
         type='TopDownCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',
