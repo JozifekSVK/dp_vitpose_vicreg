@@ -42,7 +42,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='/Users/timotejkralik/Documents/Osobne/school/DP_pose_estimation/downloaded_models/vitpose-b.pth',
+    pretrained=None,
     backbone=dict(
         type='ViT',
         img_size=(256, 192),
@@ -141,10 +141,10 @@ test_pipeline = val_pipeline
 
 data_root = '/content/drive/MyDrive/DP_pose_estimation/Dataset/COCO_dataset'
 data = dict(
-    samples_per_gpu=8,
+    samples_per_gpu=64,
     workers_per_gpu=4,
-    val_dataloader=dict(samples_per_gpu=8),
-    test_dataloader=dict(samples_per_gpu=8),
+    val_dataloader=dict(samples_per_gpu=128),
+    test_dataloader=dict(samples_per_gpu=128),
     train=dict(
         type='TopDownCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',

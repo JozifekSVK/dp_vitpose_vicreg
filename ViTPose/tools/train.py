@@ -22,6 +22,7 @@ import mmcv_custom
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a pose model')
     parser.add_argument('config', help='train config file path')
+    parser.add_argument('--model_state_dict', help='model to load state dict from')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
@@ -178,7 +179,9 @@ def main():
     meta['seed'] = seed
 
     model = build_posenet(cfg.model)
-    load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location=device_str)
+    model_path = args.model_state_dict
+    # load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location=device_str)
+    load_checkpoint(model, model_path, map_location=device_str)
     datasets = [build_dataset(cfg.data.train)]
 
     if len(cfg.workflow) == 2:
