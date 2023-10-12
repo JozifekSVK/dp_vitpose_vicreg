@@ -139,9 +139,10 @@ val_pipeline = [
 
 test_pipeline = val_pipeline
 
-data_root = '/content/drive/MyDrive/DP_pose_estimation/Dataset/COCO_dataset'
+# data_root = '/content/drive/MyDrive/DP_pose_estimation/Dataset/COCO_dataset'
+data_root = '/content/Dataset_dp'
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=128,
     workers_per_gpu=4,
     val_dataloader=dict(samples_per_gpu=128),
     test_dataloader=dict(samples_per_gpu=128),
