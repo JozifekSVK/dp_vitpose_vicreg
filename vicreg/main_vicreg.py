@@ -12,6 +12,7 @@ import math
 import os
 import sys
 import time
+from functools import partial
 
 
 import torch
@@ -23,6 +24,8 @@ import torchvision.datasets as datasets
 from tqdm import tqdm
 import augmentations as aug
 from distributed import init_distributed_mode
+
+from ViT_model.models_mae import MaskedAutoencoderViT
 
 import resnet
 
@@ -105,6 +108,11 @@ def main(args):
         shuffle=True
     )
 
+    # model = MaskedAutoencoderViT(
+    #     patch_size=16, embed_dim=768, depth=12, num_heads=12,
+    #     decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+    #     mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
+    # ).cuda(gpu)
     model = VICReg(args).cuda(gpu)
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
@@ -135,11 +143,17 @@ def main(args):
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
+            # x = x.float()
+            # y = y.float()
+
             lr = adjust_learning_rate(args, optimizer, loader, step)
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
+
+                # print(x)
                 loss = model.forward(x, y)
+
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -189,14 +203,42 @@ class VICReg(nn.Module):
         super().__init__()
         self.args = args
         self.num_features = int(args.mlp.split("-")[-1])
-        self.backbone, self.embedding = resnet.__dict__[args.arch](
-            zero_init_residual=True
+        self.embedding = 75648
+        self.backbone = MaskedAutoencoderViT(
+            patch_size=16, embed_dim=384, depth=12, num_heads=12,
+            decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+            mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
         )
+        
+        # self.backbone, self.embedding = resnet.__dict__[args.arch](
+        #     zero_init_residual=True
+        # )
+        # Print model's state_dict
+        # print("Model's state_dict:")
+        # for param_tensor in self.backbone.state_dict():
+        #     print(param_tensor, "\t", self.backbone.state_dict()[param_tensor].size())
+
+        # print()
+
         self.projector = Projector(args, self.embedding)
 
+        # print("Model's state_dict:")
+        # for param_tensor in self.projector.state_dict():
+        #     print(param_tensor, "\t", self.projector.state_dict()[param_tensor].size())
+
+        # print()
+
     def forward(self, x, y):
-        x = self.projector(self.backbone(x))
-        y = self.projector(self.backbone(y))
+        print(x.shape)
+
+        x_ = self.backbone(x)
+        y_ = self.backbone(y)
+
+        x_ = torch.flatten(x_, start_dim=1)
+        y_ = torch.flatten(y_, start_dim=1)
+
+        x = self.projector(x_)
+        y = self.projector(y_)
 
         repr_loss = F.mse_loss(x, y)
 
