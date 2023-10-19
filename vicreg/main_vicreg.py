@@ -40,7 +40,7 @@ def get_arguments():
     # Checkpoints
     parser.add_argument("--exp-dir", type=Path, default="/content/experiment_folder/",
                         help='Path to the experiment folder, where all logs/checkpoints will be stored')
-    parser.add_argument("--log-freq-time", type=int, default=300,
+    parser.add_argument("--log-freq-time", type=int, default=60,
                         help='Print logs to the stats.txt file every [log-freq-time] seconds')
 
     # Model
@@ -114,6 +114,7 @@ def main(args):
     #     mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
     # ).cuda(gpu)
     model = VICReg(args).cuda(gpu)
+
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     optimizer = LARS(
@@ -124,16 +125,17 @@ def main(args):
         lars_adaptation_filter=exclude_bias_and_norm,
     )
 
-    if (args.exp_dir / "model.pth").is_file():
-        if args.rank == 0:
-            print("resuming from checkpoint")
-        ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
-        start_epoch = ckpt["epoch"]
-        model.load_state_dict(ckpt["model"])
-        optimizer.load_state_dict(ckpt["optimizer"])
-    else:
-        start_epoch = 0
+    # if (args.exp_dir / "model.pth").is_file():
+    #     if args.rank == 0:
+    #         print("resuming from checkpoint")
+    #     ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
+    #     start_epoch = ckpt["epoch"]
+    #     model.load_state_dict(ckpt["model"])
+    #     optimizer.load_state_dict(ckpt["optimizer"])
+    # else:
+    #     start_epoch = 0
 
+    start_epoch = 0
     start_time = last_logging = time.time()
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(start_epoch, args.epochs):
@@ -178,7 +180,7 @@ def main(args):
             )
             torch.save(state, args.exp_dir / "model.pth")
     if True:
-        torch.save(model.module.backbone.state_dict(), args.exp_dir / "resnet50.pth")
+        torch.save(model.backbone.state_dict(), args.exp_dir / "backbone_trained.pth")
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
@@ -203,7 +205,7 @@ class VICReg(nn.Module):
         super().__init__()
         self.args = args
         self.num_features = int(args.mlp.split("-")[-1])
-        self.embedding = 75648
+        self.embedding = 75264
         self.backbone = MaskedAutoencoderViT(
             patch_size=16, embed_dim=384, depth=12, num_heads=12,
             decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,

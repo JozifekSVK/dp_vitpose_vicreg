@@ -228,7 +228,7 @@ class ViT(BaseBackbone):
         num_patches = self.patch_embed.num_patches
 
         # since the pretraining model has class token
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
@@ -239,7 +239,7 @@ class ViT(BaseBackbone):
                 )
             for i in range(depth)])
 
-        self.last_norm = norm_layer(embed_dim) if last_norm else nn.Identity()
+        self.norm = norm_layer(embed_dim) if last_norm else nn.Identity()
 
         if self.pos_embed is not None:
             trunc_normal_(self.pos_embed, std=.02)
@@ -317,7 +317,8 @@ class ViT(BaseBackbone):
         if self.pos_embed is not None:
             # fit for multiple GPU training
             # since the first element for pos embed (sin-cos manner) is zero, it will cause no difference
-            x = x + self.pos_embed[:, 1:] + self.pos_embed[:, :1]
+            # x = x + self.pos_embed[:, 1:] + self.pos_embed[:, :1]
+            x = x + self.pos_embed[:, :, :]
 
         for blk in self.blocks:
             if self.use_checkpoint:
@@ -325,7 +326,7 @@ class ViT(BaseBackbone):
             else:
                 x = blk(x)
 
-        x = self.last_norm(x)
+        x = self.norm(x)
 
         xp = x.permute(0, 2, 1).reshape(B, -1, Hp, Wp).contiguous()
 

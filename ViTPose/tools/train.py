@@ -179,9 +179,13 @@ def main():
     meta['seed'] = seed
 
     model = build_posenet(cfg.model)
-    model_path = args.model_state_dict
-    # load_checkpoint(model, '/content/drive/MyDrive/DP_pose_estimation/pretrained_models/vitpose-b.pth', map_location=device_str)
-    load_checkpoint(model, model_path, map_location=device_str)
+    if args.model_state_dict != 'None':
+      model_path = args.model_state_dict
+      load_checkpoint(model, model_path, map_location=device_str)
+    
+    for param in model.backbone.parameters():
+      param.requires_grad = False
+    
     datasets = [build_dataset(cfg.data.train)]
 
     if len(cfg.workflow) == 2:
