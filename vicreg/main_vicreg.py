@@ -13,12 +13,14 @@ import os
 import sys
 import time
 
+
 import torch
+from torch._C import _tracer_warn_use_python
 import torch.nn.functional as F
 from torch import nn, optim
 import torch.distributed as dist
 import torchvision.datasets as datasets
-
+from tqdm import tqdm
 import augmentations as aug
 from distributed import init_distributed_mode
 
@@ -33,9 +35,9 @@ def get_arguments():
                         help='Path to the image net dataset')
 
     # Checkpoints
-    parser.add_argument("--exp-dir", type=Path, default="./exp",
+    parser.add_argument("--exp-dir", type=Path, default="/content/experiment_folder/",
                         help='Path to the experiment folder, where all logs/checkpoints will be stored')
-    parser.add_argument("--log-freq-time", type=int, default=60,
+    parser.add_argument("--log-freq-time", type=int, default=300,
                         help='Print logs to the stats.txt file every [log-freq-time] seconds')
 
     # Model
@@ -79,20 +81,20 @@ def get_arguments():
 
 def main(args):
     torch.backends.cudnn.benchmark = True
-    init_distributed_mode(args)
+    # init_distributed_mode(args)
     print(args)
     gpu = torch.device(args.device)
 
-    if args.rank == 0:
-        args.exp_dir.mkdir(parents=True, exist_ok=True)
-        stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
-        print(" ".join(sys.argv))
-        print(" ".join(sys.argv), file=stats_file)
+    # if args.rank == 0:
+    #     args.exp_dir.mkdir(parents=True, exist_ok=True)
+    #     stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
+    #     print(" ".join(sys.argv))
+    #     print(" ".join(sys.argv), file=stats_file)
 
     transforms = aug.TrainTransform()
 
     dataset = datasets.ImageFolder(args.data_dir / "train", transforms)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
+    # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
@@ -100,12 +102,12 @@ def main(args):
         batch_size=per_device_batch_size,
         num_workers=args.num_workers,
         pin_memory=True,
-        sampler=sampler,
+        shuffle=True
     )
 
     model = VICReg(args).cuda(gpu)
-    model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     optimizer = LARS(
         model.parameters(),
         lr=0,
@@ -127,8 +129,9 @@ def main(args):
     start_time = last_logging = time.time()
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(start_epoch, args.epochs):
-        sampler.set_epoch(epoch)
-        for step, ((x, y), _) in enumerate(loader, start=epoch * len(loader)):
+        # sampler.set_epoch(epoch)
+        print(epoch)
+        for step, ((x, y), _) in enumerate(tqdm(loader)):
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
@@ -142,7 +145,7 @@ def main(args):
             scaler.update()
 
             current_time = time.time()
-            if args.rank == 0 and current_time - last_logging > args.log_freq_time:
+            if current_time - last_logging > args.log_freq_time:
                 stats = dict(
                     epoch=epoch,
                     step=step,
@@ -151,16 +154,16 @@ def main(args):
                     lr=lr,
                 )
                 print(json.dumps(stats))
-                print(json.dumps(stats), file=stats_file)
+                # print(json.dumps(stats), file=stats_file)
                 last_logging = current_time
-        if args.rank == 0:
+        if True:
             state = dict(
                 epoch=epoch + 1,
                 model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
             )
             torch.save(state, args.exp_dir / "model.pth")
-    if args.rank == 0:
+    if True:
         torch.save(model.module.backbone.state_dict(), args.exp_dir / "resnet50.pth")
 
 
@@ -197,8 +200,8 @@ class VICReg(nn.Module):
 
         repr_loss = F.mse_loss(x, y)
 
-        x = torch.cat(FullGatherLayer.apply(x), dim=0)
-        y = torch.cat(FullGatherLayer.apply(y), dim=0)
+        # x = torch.cat(x, dim=0)
+        # y = torch.cat(y, dim=0)
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0)
 
