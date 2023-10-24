@@ -14,7 +14,7 @@ import sys
 import time
 from functools import partial
 
-
+from PIL import Image
 import torch
 from torch._C import _tracer_warn_use_python
 import torch.nn.functional as F
@@ -28,6 +28,64 @@ from distributed import init_distributed_mode
 from ViT_model.models_mae import MaskedAutoencoderViT
 
 import resnet
+
+class CocoDetection(torch.utils.data.Dataset):
+    """`MS Coco Detection <http://mscoco.org/dataset/#detections-challenge2016>`_ Dataset.
+
+    Args:
+        root (string): Root directory where images are downloaded to.
+        annFile (string): Path to json annotation file.
+        transform (callable, optional): A function/transform that  takes in an PIL image
+            and returns a transformed version. E.g, ``transforms.ToTensor``
+        target_transform (callable, optional): A function/transform that takes in the
+            target and transforms it.
+    """
+
+    def __init__(self, root, annFile, transform=None, target_transform=None):
+        from pycocotools.coco import COCO
+        self.root = root
+        self.coco = COCO(annFile)
+        self.ids = list(self.coco.imgs.keys())
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: Tuple (image, target). target is the object returned by ``coco.loadAnns``.
+        """
+        coco = self.coco
+        img_id = self.ids[index]
+        ann_ids = coco.getAnnIds(imgIds=img_id)
+        target = coco.loadAnns(ann_ids)
+
+        path = coco.loadImgs(img_id)[0]['file_name']
+
+        img = Image.open(os.path.join(self.root, path)).convert('RGB')
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img
+
+
+    def __len__(self):
+        return len(self.ids)
+
+    def __repr__(self):
+        fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
+        fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
+        fmt_str += '    Root Location: {}\n'.format(self.root)
+        tmp = '    Transforms (if any): '
+        fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
+        tmp = '    Target Transforms (if any): '
+        fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
+        return fmt_str
 
 
 def get_arguments():
@@ -96,7 +154,9 @@ def main(args):
 
     transforms = aug.TrainTransform()
 
-    dataset = datasets.ImageFolder(args.data_dir / "train", transforms)
+    dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
+
+    # dataset = datasets.ImageFolder(args.data_dir / "train", transforms)
     # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
@@ -141,7 +201,11 @@ def main(args):
     for epoch in range(start_epoch, args.epochs):
         # sampler.set_epoch(epoch)
         print(epoch)
-        for step, ((x, y), _) in enumerate(tqdm(loader)):
+        # for step, ((x, y), _) in enumerate(tqdm(loader)):
+        for value in enumerate(tqdm(loader)):
+            step = value[0]
+            x = value[1][0]
+            y = value[1][1]
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
