@@ -24,6 +24,7 @@ def train_one_epoch(model: torch.nn.Module,
                     log_writer=None,
                     args=None):
     model.train(True)
+    torch.save(model.state_dict(), "/content/dp_vitpose_vicreg/experiments_folder/mae_backbone_trained.pth")
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)

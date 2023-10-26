@@ -16,9 +16,11 @@ import os
 import time
 from pathlib import Path
 from PIL import Image
+from functools import partial
 
 import torch
 import torch.backends.cudnn as cudnn
+from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -276,6 +278,8 @@ def main(args):
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
+
+        torch.save(model.state_dict(), args.exp_dir / "mae_backbone_trained.pth")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
