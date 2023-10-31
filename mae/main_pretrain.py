@@ -35,8 +35,6 @@ import timm.optim.optim_factory as optim_factory
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_mae
-
 from engine_pretrain import train_one_epoch
 
 class CocoDetection(torch.utils.data.Dataset):
@@ -279,7 +277,7 @@ def main(args):
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        torch.save(model.state_dict(), args.exp_dir / "mae_backbone_trained.pth")
+        torch.save(model.state_dict(), f"/content/drive/MyDrive/DP_pose_estimation/pretrained_models/my_mae_backbone_trained_{args.epochs}.pth")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
