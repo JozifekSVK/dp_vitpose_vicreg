@@ -138,7 +138,7 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
 
-    parser.add_argument('--output_dir', default='./output_dir',
+    parser.add_argument('--output_dir', default='/content/drive/MyDrive/DP_pose_estimation/experiments_MAE/',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
                         help='path where to tensorboard log')
@@ -263,10 +263,6 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
-            misc.save_model(
-                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch)
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
@@ -277,7 +273,11 @@ def main(args):
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        torch.save(model.state_dict(), f"/content/drive/MyDrive/DP_pose_estimation/pretrained_models/my_mae_backbone_trained_{args.epochs}.pth")
+        misc.save_model(
+            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+            loss_scaler=loss_scaler, epoch=epoch)
+
+        torch.save(model.state_dict(), f"/content/drive/MyDrive/DP_pose_estimation/pretrained_models/my_mae_backbone_trained_{args.epochs}_2.pth")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
