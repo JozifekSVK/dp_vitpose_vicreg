@@ -104,7 +104,7 @@ def get_arguments():
     # Model
     parser.add_argument("--arch", type=str, default="resnet50",
                         help='Architecture of the backbone encoder network')
-    parser.add_argument("--mlp", default="1024-1024-1024",
+    parser.add_argument("--mlp", default="4096-4096-4096",
                         help='Size and number of layers of the MLP expander head')
 
     # Optim
@@ -185,15 +185,15 @@ def main(args):
         lars_adaptation_filter=exclude_bias_and_norm,
     )
 
-    # if (args.exp_dir / "model.pth").is_file():
-    #     if args.rank == 0:
-    #         print("resuming from checkpoint")
-    #     ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
-    #     start_epoch = ckpt["epoch"]
-    #     model.load_state_dict(ckpt["model"])
-    #     optimizer.load_state_dict(ckpt["optimizer"])
-    # else:
-    #     start_epoch = 0
+    if (args.exp_dir / "model.pth").is_file():
+        
+        print("resuming from checkpoint")
+        ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
+        start_epoch = ckpt["epoch"]
+        model.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+    else:
+        start_epoch = 0
 
     start_epoch = 0
     start_time = last_logging = time.time()
