@@ -13,6 +13,7 @@ import os
 import sys
 import time
 from functools import partial
+from datetime import datetime
 
 from PIL import Image
 import torch
@@ -142,7 +143,7 @@ def get_arguments():
 
 def main(args):
     torch.backends.cudnn.benchmark = True
-    # init_distributed_mode(args)
+    init_distributed_mode(args)
     print(args)
     gpu = torch.device(args.device)
 
@@ -156,8 +157,7 @@ def main(args):
 
     dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
 
-    # dataset = datasets.ImageFolder(args.data_dir / "train", transforms)
-    # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
@@ -165,18 +165,14 @@ def main(args):
         batch_size=per_device_batch_size,
         num_workers=args.num_workers,
         pin_memory=True,
-        shuffle=True
+        shuffle=False,
+        sampler=sampler
     )
 
-    # model = MaskedAutoencoderViT(
-    #     patch_size=16, embed_dim=768, depth=12, num_heads=12,
-    #     decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-    #     mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
-    # ).cuda(gpu)
     model = VICReg(args).cuda(gpu)
 
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     optimizer = LARS(
         model.parameters(),
         lr=0,
@@ -185,20 +181,36 @@ def main(args):
         lars_adaptation_filter=exclude_bias_and_norm,
     )
 
-    if (args.exp_dir / "model.pth").is_file():
+
+    pathname = os.path.abspath(os.path.dirname(__file__))
+    current_dateTime = str(datetime.now()).split('.')[0].replace(' ','-')
+    stats_file = open(f"{pathname}/vicreg_experiments_logs/{current_dateTime}_stats.txt", "a", buffering=1)
+    # if (args.exp_dir / "model.pth").is_file():
         
-        print("resuming from checkpoint")
-        ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
-        start_epoch = ckpt["epoch"]
-        model.load_state_dict(ckpt["model"])
-        optimizer.load_state_dict(ckpt["optimizer"])
-    else:
-        start_epoch = 0
+    #     print("resuming from checkpoint")
+    #     ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
+    #     start_epoch = ckpt["epoch"]
+    #     model.load_state_dict(ckpt["model"])
+    #     optimizer.load_state_dict(ckpt["optimizer"])
+    # else:
+    #     start_epoch = 0
+
+    start_epoch = 0
+
+    ### Getting model size
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    print('model size: {:.3f}MB'.format(size_all_mb))
 
     start_time = last_logging = time.time()
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(start_epoch, args.epochs):
-        # sampler.set_epoch(epoch)
+        sampler.set_epoch(epoch)
         print(epoch)
         # for step, ((x, y), _) in enumerate(tqdm(loader)):
         for value in enumerate(tqdm(loader)):
@@ -208,15 +220,11 @@ def main(args):
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
-            # x = x.float()
-            # y = y.float()
-
             lr = adjust_learning_rate(args, optimizer, loader, step)
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
 
-                # print(x)
                 loss = model.forward(x, y)
 
             scaler.scale(loss).backward()
@@ -233,7 +241,7 @@ def main(args):
                     lr=lr,
                 )
                 print(json.dumps(stats))
-                # print(json.dumps(stats), file=stats_file)
+                print(json.dumps(stats), file=stats_file)
                 last_logging = current_time
         if True:
             state = dict(
@@ -249,6 +257,7 @@ def main(args):
 def adjust_learning_rate(args, optimizer, loader, step):
     max_steps = args.epochs * len(loader)
     warmup_steps = 10 * len(loader)
+    warmup_steps = 1
     base_lr = args.base_lr * args.batch_size / 256
     if step < warmup_steps:
         lr = base_lr * step / warmup_steps
