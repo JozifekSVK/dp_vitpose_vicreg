@@ -143,7 +143,7 @@ def get_arguments():
 
 def main(args):
     torch.backends.cudnn.benchmark = True
-    init_distributed_mode(args)
+    # init_distributed_mode(args)
     print(args)
     gpu = torch.device(args.device)
 
@@ -157,7 +157,7 @@ def main(args):
 
     dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
 
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
+    # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
@@ -166,16 +166,16 @@ def main(args):
         num_workers=args.num_workers,
         pin_memory=True,
         shuffle=False,
-        sampler=sampler
+        # sampler=sampler
     )
 
     model = VICReg(args).cuda(gpu)
 
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     optimizer = LARS(
         model.parameters(),
-        lr=0,
+        lr=args.base_lr,
         weight_decay=args.wd,
         weight_decay_filter=exclude_bias_and_norm,
         lars_adaptation_filter=exclude_bias_and_norm,
@@ -184,7 +184,9 @@ def main(args):
 
     pathname = os.path.abspath(os.path.dirname(__file__))
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ','-')
-    stats_file = open(f"{pathname}/vicreg_experiments_logs/{current_dateTime}_stats.txt", "a", buffering=1)
+    directory_name = f"{pathname}/vicreg_experiments_logs/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    os.mkdir(directory_name)
+    stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
     # if (args.exp_dir / "model.pth").is_file():
         
     #     print("resuming from checkpoint")
@@ -210,7 +212,7 @@ def main(args):
     start_time = last_logging = time.time()
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(start_epoch, args.epochs):
-        sampler.set_epoch(epoch)
+        # sampler.set_epoch(epoch)
         print(epoch)
         # for step, ((x, y), _) in enumerate(tqdm(loader)):
         for value in enumerate(tqdm(loader)):
@@ -220,7 +222,7 @@ def main(args):
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
-            lr = adjust_learning_rate(args, optimizer, loader, step)
+            # lr = adjust_learning_rate(args, optimizer, loader, step)
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
@@ -238,7 +240,7 @@ def main(args):
                     step=step,
                     loss=loss.item(),
                     time=int(current_time - start_time),
-                    lr=lr,
+                    lr=args.base_lr,
                 )
                 print(json.dumps(stats))
                 print(json.dumps(stats), file=stats_file)
@@ -249,9 +251,9 @@ def main(args):
                 model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
             )
-            torch.save(state, args.exp_dir / "model.pth")
+            torch.save(state, directory_name / "model.pth")
     if True:
-        torch.save(model.backbone.state_dict(), args.exp_dir / "backbone_trained.pth")
+        torch.save(model.backbone.state_dict(), directory_name / "backbone_trained.pth")
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
