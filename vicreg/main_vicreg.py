@@ -251,9 +251,9 @@ def main(args):
                 model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
             )
-            torch.save(state, directory_name / "model.pth")
+            torch.save(state, directory_name + "/" + "model.pth")
     if True:
-        torch.save(model.backbone.state_dict(), directory_name / "backbone_trained.pth")
+        torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
