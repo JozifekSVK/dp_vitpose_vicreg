@@ -20,6 +20,7 @@ import torch.distributed as dist
 import torchvision.datasets as datasets
 from tqdm import tqdm
 from PIL import Image
+from statistics import mean, stdev
 
 import augmentations as aug
 from distributed import init_distributed_mode
@@ -242,6 +243,29 @@ def main(args):
                 print(json.dumps(stats))
                 print(json.dumps(stats), file=stats_file)
                 last_logging = current_time
+
+        ### Calculating validation L2-norm ###
+        model.eval()
+        res = []
+        for value in enumerate(tqdm(loader)):
+          step = value[0]
+          x = value[1][0]
+          y = value[1][1]
+          
+          if step == 10:
+            break
+          
+          x = x.cuda(gpu, non_blocking=True)
+          x_ = model.backbone( x ).to('cpu')
+
+          norm_base = x_.norm(dim=1, p=2).tolist()
+          res += norm_base
+
+        print( mean(res) )
+        print( stdev(res) )
+
+        model.train()
+        ######################################
         if True:
             state = dict(
                 epoch=epoch + 1,
@@ -281,8 +305,11 @@ class VICReg(nn.Module):
         self.projector = Projector(args, self.embedding)
 
     def forward(self, x, y):
-        x = self.projector(self.backbone(x))
-        y = self.projector(self.backbone(y))
+        x_ = self.backbone(x)
+        y_ = self.backbone(y)
+               
+        x = self.projector(x_)
+        y = self.projector(y_)
 
         repr_loss = F.mse_loss(x, y)
 
