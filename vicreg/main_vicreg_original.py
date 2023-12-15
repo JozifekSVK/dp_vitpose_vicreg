@@ -261,8 +261,12 @@ def main(args):
           norm_base = x_.norm(dim=1, p=2).tolist()
           res += norm_base
 
-        print( mean(res) )
-        print( stdev(res) )
+        stats = dict(
+            mean=mean(res),
+            std=stdev(res)
+        )
+        print(json.dumps(stats))
+        print(json.dumps(stats), file=stats_file)
 
         model.train()
         ######################################
