@@ -27,7 +27,6 @@ from distributed import init_distributed_mode
 
 import resnet
 
-
 class CocoDetection(torch.utils.data.Dataset):
     """`MS Coco Detection <http://mscoco.org/dataset/#detections-challenge2016>`_ Dataset.
 
@@ -130,8 +129,6 @@ def get_arguments():
     parser.add_argument("--num-workers", type=int, default=10)
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
-    parser.add_argument('--gpu', type=int, default=0,
-                        help='device ID to use for training / testing')
 
     # Distributed
     parser.add_argument('--world-size', default=1, type=int,
@@ -147,7 +144,9 @@ def main(args):
     torch.backends.cudnn.benchmark = True
     # init_distributed_mode(args)
     print(args)
-    gpu = torch.device(args.device, args.gpu)
+
+    gpu = torch.device(args.device)
+
     # if args.rank == 0:
     #     args.exp_dir.mkdir(parents=True, exist_ok=True)
     #     stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
@@ -156,7 +155,8 @@ def main(args):
 
     transforms = aug.TrainTransform()
 
-    dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
+    dataset = datasets.ImageFolder(args.data_dir / "train", transforms)
+    # dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
     # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
@@ -186,9 +186,9 @@ def main(args):
     )
 
 
-    pathname = os.path.abspath(args.exp_dir)
-    current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
-    directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    pathname = os.path.abspath(os.path.dirname(__file__))
+    current_dateTime = str(datetime.now()).split('.')[0].replace(' ','-')
+    directory_name = f"{pathname}/vicreg_experiments_logs/{args.base_lr}_{args.mlp}_{current_dateTime}"
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
     # if (args.exp_dir / "model.pth").is_file():
@@ -220,9 +220,10 @@ def main(args):
         # for step, ((x, y), _) in enumerate(loader, start=epoch * len(loader)):
         # for step, ((x, y), _) in enumerate(tqdm(loader)):
         for value in enumerate(tqdm(loader)):
+            # print(value[1][0][0])
             step = value[0]
-            x = value[1][0]
-            y = value[1][1]
+            x = value[1][0][0]
+            y = value[1][0][1]
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
 
@@ -253,8 +254,10 @@ def main(args):
         res = []
         for value in enumerate(tqdm(loader)):
           step = value[0]
-          x = value[1][0]
-          y = value[1][1]
+          # x = value[1][0]
+          # y = value[1][1]
+          x = value[1][0][0]
+          y = value[1][0][1]
           
           if step == 10:
             break
@@ -306,26 +309,29 @@ class VICReg(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
+        
         if args.no_projector == 0:
           self.num_features = int(args.mlp.split("-")[-1])
         else:
           self.num_features = 2024
+          
 
         self.backbone, self.embedding = resnet.__dict__[args.arch](
             zero_init_residual=True
         )
         self.projector = Projector(args, self.embedding)
+          
 
     def forward(self, x, y):
         x_ = self.backbone(x)
         y_ = self.backbone(y)
-        
-        if args.no_projector == 1:
-          x = x_
-          y = y_
-        else:
+               
+        if args.no_projector == 0:
           x = self.projector(x_)
           y = self.projector(y_)
+        else:
+          x = x_
+          y = y_
 
         repr_loss = F.mse_loss(x, y)
 

@@ -30,6 +30,7 @@ from ViT_model.models_mae import MaskedAutoencoderViT
 
 import resnet
 
+
 class CocoDetection(torch.utils.data.Dataset):
     """`MS Coco Detection <http://mscoco.org/dataset/#detections-challenge2016>`_ Dataset.
 
@@ -73,7 +74,6 @@ class CocoDetection(torch.utils.data.Dataset):
             target = self.target_transform(target)
 
         return img
-
 
     def __len__(self):
         return len(self.ids)
@@ -130,6 +130,8 @@ def get_arguments():
     parser.add_argument("--num-workers", type=int, default=10)
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
+    parser.add_argument('--gpu', type=int, default=0,
+                        help='device ID to use for training / testing')
 
     # Distributed
     parser.add_argument('--world-size', default=1, type=int,
@@ -145,8 +147,7 @@ def main(args):
     torch.backends.cudnn.benchmark = True
     # init_distributed_mode(args)
     print(args)
-    gpu = torch.device(args.device)
-
+    gpu = torch.device(args.device, args.gpu)
     # if args.rank == 0:
     #     args.exp_dir.mkdir(parents=True, exist_ok=True)
     #     stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
@@ -155,7 +156,7 @@ def main(args):
 
     transforms = aug.TrainTransform()
 
-    dataset = CocoDetection( str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform = transforms )
+    dataset = CocoDetection(str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform=transforms)
 
     # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
@@ -181,14 +182,14 @@ def main(args):
         lars_adaptation_filter=exclude_bias_and_norm,
     )
 
-
-    pathname = os.path.abspath(os.path.dirname(__file__))
-    current_dateTime = str(datetime.now()).split('.')[0].replace(' ','-')
-    directory_name = f"{pathname}/vicreg_experiments_logs/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    # pathname = os.path.abspath(os.path.dirname(__file__))
+    pathname = os.path.abspath(args.exp_dir)
+    current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
+    directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
     # if (args.exp_dir / "model.pth").is_file():
-        
+
     #     print("resuming from checkpoint")
     #     ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
     #     start_epoch = ckpt["epoch"]
@@ -206,7 +207,7 @@ def main(args):
     buffer_size = 0
     for buffer in model.buffers():
         buffer_size += buffer.nelement() * buffer.element_size()
-    size_all_mb = (param_size + buffer_size) / 1024**2
+    size_all_mb = (param_size + buffer_size) / 1024 ** 2
     print('model size: {:.3f}MB'.format(size_all_mb))
 
     start_time = last_logging = time.time()
@@ -251,9 +252,10 @@ def main(args):
                 model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
             )
-            torch.save(state, directory_name + "/" + "model.pth")
+            # torch.save(state, directory_name + "/" + "model.pth")
     if True:
-        torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
+        # torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
+        pass
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
@@ -285,7 +287,7 @@ class VICReg(nn.Module):
             decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
             mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
         )
-        
+
         # self.backbone, self.embedding = resnet.__dict__[args.arch](
         #     zero_init_residual=True
         # )
@@ -305,7 +307,6 @@ class VICReg(nn.Module):
         # print()
 
     def forward(self, x, y):
-
         x_ = self.backbone(x)
         y_ = self.backbone(y)
 
@@ -333,9 +334,9 @@ class VICReg(nn.Module):
         ) + off_diagonal(cov_y).pow_(2).sum().div(self.num_features)
 
         loss = (
-            self.args.sim_coeff * repr_loss
-            + self.args.std_coeff * std_loss
-            + self.args.cov_coeff * cov_loss
+                self.args.sim_coeff * repr_loss
+                + self.args.std_coeff * std_loss
+                + self.args.cov_coeff * cov_loss
         )
         return loss
 
@@ -364,14 +365,14 @@ def off_diagonal(x):
 
 class LARS(optim.Optimizer):
     def __init__(
-        self,
-        params,
-        lr,
-        weight_decay=0,
-        momentum=0.9,
-        eta=0.001,
-        weight_decay_filter=None,
-        lars_adaptation_filter=None,
+            self,
+            params,
+            lr,
+            weight_decay=0,
+            momentum=0.9,
+            eta=0.001,
+            weight_decay_filter=None,
+            lars_adaptation_filter=None,
     ):
         defaults = dict(
             lr=lr,
