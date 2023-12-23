@@ -26,6 +26,8 @@ from tqdm import tqdm
 import augmentations as aug
 from distributed import init_distributed_mode
 
+from statistics import mean, stdev
+
 from ViT_model.models_mae import MaskedAutoencoderViT
 
 import resnet
@@ -107,6 +109,8 @@ def get_arguments():
                         help='Architecture of the backbone encoder network')
     parser.add_argument("--mlp", default="8192-8192-8192",
                         help='Size and number of layers of the MLP expander head')
+    parser.add_argument("--no-projector", default="False",
+                        help='Flag if projector will be used')
 
     # Optim
     parser.add_argument("--epochs", type=int, default=100,
@@ -174,18 +178,29 @@ def main(args):
 
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-    optimizer = LARS(
-        model.parameters(),
-        lr=args.base_lr,
-        weight_decay=args.wd,
-        weight_decay_filter=exclude_bias_and_norm,
-        lars_adaptation_filter=exclude_bias_and_norm,
+    # optimizer = LARS(
+    #     model.parameters(),
+    #     lr=args.base_lr,
+    #     weight_decay=args.wd,
+    #     weight_decay_filter=exclude_bias_and_norm,
+    #     lars_adaptation_filter=exclude_bias_and_norm,
+    # )
+    optimizer = torch.optim.Adam(
+      model.parameters(), 
+      lr=args.base_lr,
+      weight_decay=args.wd,
+      # weight_decay_filter=exclude_bias_and_norm
     )
 
     # pathname = os.path.abspath(os.path.dirname(__file__))
     pathname = os.path.abspath(args.exp_dir)
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
-    directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    
+    if args.no_projector == "True":
+      directory_name = f"{pathname}/{args.base_lr}_no_projector_{current_dateTime}"
+    else:
+      directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
     # if (args.exp_dir / "model.pth").is_file():
@@ -246,6 +261,33 @@ def main(args):
                 print(json.dumps(stats))
                 print(json.dumps(stats), file=stats_file)
                 last_logging = current_time
+
+        ### Calculating validation L2-norm ###
+        model.eval()
+        res = []
+        for value in enumerate(tqdm(loader)):
+          step = value[0]
+          x = value[1][0]
+          y = value[1][1]
+          
+          if step == 10:
+            break
+          
+          x = x.cuda(gpu, non_blocking=True)
+          x_ = model.backbone( x ).to('cpu')
+
+          norm_base = x_.norm(dim=1, p=2).tolist()
+          res += norm_base
+
+        stats = dict(
+            mean=mean(res),
+            std=stdev(res)
+        )
+        print(json.dumps(stats))
+        print(json.dumps(stats), file=stats_file)
+
+        model.train()
+        ######################################
         if True:
             state = dict(
                 epoch=epoch + 1,
@@ -280,13 +322,18 @@ class VICReg(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.num_features = int(args.mlp.split("-")[-1])
+        # self.num_features = int(args.mlp.split("-")[-1])
         self.embedding = 75264
         self.backbone = MaskedAutoencoderViT(
             patch_size=16, embed_dim=384, depth=12, num_heads=12,
             decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
             mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
         )
+
+        if args.no_projector == "True":
+          self.num_features = 2024
+        else:
+          self.num_features = int(args.mlp.split("-")[-1])
 
         # self.backbone, self.embedding = resnet.__dict__[args.arch](
         #     zero_init_residual=True
@@ -310,11 +357,17 @@ class VICReg(nn.Module):
         x_ = self.backbone(x)
         y_ = self.backbone(y)
 
-        x_ = torch.flatten(x_, start_dim=1)
-        y_ = torch.flatten(y_, start_dim=1)
+        
 
-        x = self.projector(x_)
-        y = self.projector(y_)
+        if args.no_projector == "True":
+          x = x_
+          y = y_
+        else:
+          x_ = torch.flatten(x_, start_dim=1)
+          y_ = torch.flatten(y_, start_dim=1)
+
+          x = self.projector(x_)
+          y = self.projector(y_)
 
         repr_loss = F.mse_loss(x, y)
 
