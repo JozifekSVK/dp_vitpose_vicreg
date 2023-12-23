@@ -105,7 +105,7 @@ def get_arguments():
                         help='Architecture of the backbone encoder network')
     parser.add_argument("--mlp", default="8192-8192-8192",
                         help='Size and number of layers of the MLP expander head')
-    parser.add_argument("--no-projector", default=0,
+    parser.add_argument("--no-projector", default="False",
                         help='Flag if projector will be used')
 
     # Optim
@@ -188,7 +188,10 @@ def main(args):
 
     pathname = os.path.abspath(args.exp_dir)
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
-    directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
+    if args.no_projector == "True":
+      directory_name = f"{pathname}/{args.base_lr}_no_projector_{current_dateTime}"
+    else:
+      directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
     # if (args.exp_dir / "model.pth").is_file():
@@ -306,10 +309,10 @@ class VICReg(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        if args.no_projector == 0:
-          self.num_features = int(args.mlp.split("-")[-1])
-        else:
+        if args.no_projector == "True":
           self.num_features = 2024
+        else:
+          self.num_features = int(args.mlp.split("-")[-1])
 
         self.backbone, self.embedding = resnet.__dict__[args.arch](
             zero_init_residual=True
@@ -320,7 +323,7 @@ class VICReg(nn.Module):
         x_ = self.backbone(x)
         y_ = self.backbone(y)
         
-        if args.no_projector == 1:
+        if args.no_projector == "True":
           x = x_
           y = y_
         else:
