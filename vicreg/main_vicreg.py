@@ -275,6 +275,7 @@ def main(args):
           
           x = x.cuda(gpu, non_blocking=True)
           x_ = model.backbone( x ).to('cpu')
+          x_ = torch.flatten(x_, start_dim=1)
 
           norm_base = x_.norm(dim=1, p=2).tolist()
           res += norm_base
