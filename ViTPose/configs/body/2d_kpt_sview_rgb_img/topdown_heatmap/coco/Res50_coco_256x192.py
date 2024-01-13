@@ -30,7 +30,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='torchvision://resnet50',
+    pretrained=None,
     backbone=dict(type='ResNet', depth=50),
     keypoint_head=dict(
         type='TopdownHeatmapSimpleHead',
@@ -55,7 +55,7 @@ data_cfg = dict(
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
-    use_gt_bbox=False,
+    use_gt_bbox=True,
     det_bbox_thr=0.0,
     bbox_file='data/coco/person_detection_results/'
     'COCO_val2017_detections_AP_H_56_person.json',
@@ -105,7 +105,7 @@ val_pipeline = [
 
 test_pipeline = val_pipeline
 
-data_root = 'data/coco'
+data_root = '/content/Dataset_dp'
 data = dict(
     samples_per_gpu=64,
     workers_per_gpu=2,
