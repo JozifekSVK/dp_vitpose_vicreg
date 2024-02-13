@@ -254,7 +254,7 @@ def main(args):
     ### output directory
     pathname = os.path.abspath(args.output_dir)
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
-    directory_name = f"{pathname}/{args.blr}_vit_mae_{current_dateTime}"
+    directory_name = f"{pathname}/{args.blr}_vit_small_mae_{current_dateTime}"
     os.mkdir(directory_name)
 
     print(f"Start training for {args.epochs} epochs")
