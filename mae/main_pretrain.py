@@ -9,7 +9,7 @@
 # BEiT: https://github.com/microsoft/unilm/tree/master/beit
 # --------------------------------------------------------
 import argparse
-import datetime
+from datetime import datetime
 import json
 import numpy as np
 import os
@@ -218,13 +218,12 @@ def main(args):
     
     # define the model
     model = MaskedAutoencoderViT(
-          patch_size=16, embed_dim=384, depth=12, num_heads=12,
-          decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+          patch_size=16, embed_dim=384, depth=12, num_heads=6,
+          decoder_embed_dim=384, decoder_depth=8, decoder_num_heads=6,
           mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
       )
 
     model.to(device)
-    print('DAVAM NA DEVICE')
 
     model_without_ddp = model
     print("Model = %s" % str(model_without_ddp))
@@ -245,12 +244,18 @@ def main(args):
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
     loss_scaler = NativeScaler()
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+
+    ### output directory
+    pathname = os.path.abspath(args.output_dir)
+    current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
+    directory_name = f"{pathname}/{args.blr}_vit_mae_{current_dateTime}"
+    os.mkdir(directory_name)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
@@ -270,14 +275,14 @@ def main(args):
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
                 log_writer.flush()
-            with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+            with open(os.path.join(directory_name, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        misc.save_model(
-            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-            loss_scaler=loss_scaler, epoch=epoch)
+        # misc.save_model(
+        #     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+        #     loss_scaler=loss_scaler, epoch=epoch)
 
-        torch.save(model.state_dict(), f"/content/drive/MyDrive/DP_pose_estimation/pretrained_models/my_mae_backbone_trained_{args.epochs}_2.pth")
+        torch.save(model.state_dict(), f"{directory_name}/mae_last_epoch.pth")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
