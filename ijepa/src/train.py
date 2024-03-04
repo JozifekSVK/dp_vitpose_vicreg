@@ -21,6 +21,7 @@ import copy
 import logging
 import sys
 import yaml
+from datetime import datetime
 
 import numpy as np
 
@@ -41,7 +42,7 @@ from src.utils.logging import (
     grad_logger,
     AverageMeter)
 from src.utils.tensors import repeat_interleave_batch
-from src.datasets.imagenet1k import make_imagenet1k, make_COCO
+from src.datasets.imagenet1k import make_COCO
 
 from src.helper import (
     load_checkpoint,
@@ -124,6 +125,13 @@ def main(args, resume_preempt=False):
     # -- LOGGING
     folder = args['logging']['folder']
     tag = args['logging']['write_tag']
+
+    current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
+    directory_name = f"{folder}/run_{current_dateTime}"
+    os.mkdir(directory_name)
+    
+    folder = directory_name
+
 
     dump = os.path.join(folder, 'params-ijepa.yaml')
     with open(dump, 'w') as f:
@@ -259,6 +267,7 @@ def main(args, resume_preempt=False):
             'lr': lr
         }
         if rank == 0:
+            torch.save(encoder.state_dict(), "/content/dp_vitpose_vicreg/ijepa/logs/backbone_encoder.pth")
             torch.save(save_dict, latest_path)
             if (epoch + 1) % checkpoint_freq == 0:
                 torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
@@ -275,13 +284,15 @@ def main(args, resume_preempt=False):
         maskB_meter = AverageMeter()
         time_meter = AverageMeter()
 
+        print(f"Epoch contains {len(unsupervised_loader)} batches")
         for itr, (udata, masks_enc, masks_pred) in enumerate(unsupervised_loader):
 
             def load_imgs():
                 # -- unsupervised imgs
-                imgs = udata[0].to(device, non_blocking=True).float()
-                masks_1 = [u.to(device, non_blocking=True).float() for u in masks_enc]
-                masks_2 = [u.to(device, non_blocking=True).float() for u in masks_pred]
+                
+                imgs = udata.to(device, non_blocking=True)
+                masks_1 = [u.to(device, non_blocking=True) for u in masks_enc]
+                masks_2 = [u.to(device, non_blocking=True) for u in masks_pred]
                 return (imgs, masks_1, masks_2)
             imgs, masks_enc, masks_pred = load_imgs()
             maskA_meter.update(len(masks_enc[0][0]))
@@ -294,6 +305,7 @@ def main(args, resume_preempt=False):
 
                 def forward_target():
                     with torch.no_grad():
+                        # print(imgs.shape)
                         h = target_encoder(imgs)
                         h = F.layer_norm(h, (h.size(-1),))  # normalize over feature-dim
                         B = len(h)
@@ -313,7 +325,7 @@ def main(args, resume_preempt=False):
                     return loss
 
                 # Step 1. Forward
-                with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
+                with torch.cuda.amp.autocast(dtype=torch.float16):
                     h = forward_target()
                     z = forward_context()
                     loss = loss_fn(z, h)
