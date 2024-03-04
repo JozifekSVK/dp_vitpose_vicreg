@@ -12,6 +12,7 @@ import time
 import numpy as np
 
 from logging import getLogger
+from PIL import Image
 
 import torch
 import torchvision
@@ -86,6 +87,7 @@ def make_COCO(
   data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
+        collate_fn=collator,
         num_workers=num_workers,
         pin_memory=pin_mem,
         shuffle=False,
