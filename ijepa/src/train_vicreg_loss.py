@@ -319,11 +319,43 @@ def main(args, resume_preempt=False):
                     z = predictor(z, masks_enc, masks_pred)
                     return z
 
-                ### Loss nahradit tak aby sme pouzili VICreg LOSS s tromi clenmi
-                ### 
-                def loss_fn(z, h): 
-                    loss = F.smooth_l1_loss(z, h)
-                    loss = AllReduce.apply(loss)
+                
+                def off_diagonal(x):
+                  n, m = x.shape
+                  assert n == m
+                  return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+                
+                def loss_fn(z, h):
+                    z = z.view(z.shape[0], -1)
+                    h = h.view(h.shape[0], -1)
+
+                    x = z
+                    y = h
+
+                    batches = z.shape[0]
+                    num_features = z.shape[1]
+
+                    repr_loss = F.mse_loss(x, y)
+
+                
+                    x = x - x.mean(dim=0)
+                    y = y - y.mean(dim=0)
+
+                    std_x = torch.sqrt(x.var(dim=0) + 0.0001)
+                    std_y = torch.sqrt(y.var(dim=0) + 0.0001)
+                    std_loss = torch.mean(F.relu(1 - std_x)) / 2 + torch.mean(F.relu(1 - std_y)) / 2
+
+                    cov_x = (x.T @ x) / (batches - 1)
+                    cov_y = (y.T @ y) / (batches - 1)
+                    cov_loss = off_diagonal(cov_x).pow_(2).sum().div(
+                        num_features
+                    ) + off_diagonal(cov_y).pow_(2).sum().div(num_features)
+
+                    loss = (
+                            25 * repr_loss
+                            + 25 * std_loss
+                            + 1 * cov_loss
+                    )
                     return loss
 
                 # Step 1. Forward
