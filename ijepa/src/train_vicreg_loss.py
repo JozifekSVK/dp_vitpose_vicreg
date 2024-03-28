@@ -164,7 +164,9 @@ def main(args, resume_preempt=False):
                            ('%.5f', 'loss'),
                            ('%.5f', 'mask-A'),
                            ('%.5f', 'mask-B'),
-                           ('%d', 'time (ms)'))
+                           ('%d', 'time (ms)'),
+                           ('%.5f', 'lr')
+                           )
 
     # -- init model
     encoder, predictor = init_model(
@@ -267,7 +269,7 @@ def main(args, resume_preempt=False):
             'lr': lr
         }
         if rank == 0:
-            torch.save(encoder.state_dict(), "/content/dp_vitpose_vicreg/ijepa/logs/backbone_encoder.pth")
+            torch.save(encoder.state_dict(), f"{folder}/backbone_encoder.pth")
             torch.save(save_dict, latest_path)
             if (epoch + 1) % checkpoint_freq == 0:
                 torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
@@ -376,10 +378,11 @@ def main(args, resume_preempt=False):
                 optimizer.zero_grad()
 
                 # Step 3. momentum update of target encoder
-                with torch.no_grad():
-                    m = next(momentum_scheduler)
-                    for param_q, param_k in zip(encoder.parameters(), target_encoder.parameters()):
-                        param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
+                if itr % 5 == 0:
+                  with torch.no_grad():
+                      m = next(momentum_scheduler)
+                      for param_q, param_k in zip(encoder.parameters(), target_encoder.parameters()):
+                          param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
 
                 return (float(loss), _new_lr, _new_wd, grad_stats)
             (loss, _new_lr, _new_wd, grad_stats), etime = gpu_timer(train_step)
@@ -388,7 +391,7 @@ def main(args, resume_preempt=False):
 
             # -- Logging
             def log_stats():
-                csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
+                csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime, _new_lr)
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     logger.info('[%d, %5d] loss: %.3f '
                                 'masks: %.1f %.1f '
@@ -396,7 +399,7 @@ def main(args, resume_preempt=False):
                                 '[mem: %.2e] '
                                 '(%.1f ms)'
                                 % (epoch + 1, itr,
-                                   loss_meter.avg,
+                                   loss,
                                    maskA_meter.avg,
                                    maskB_meter.avg,
                                    _new_wd,
@@ -417,7 +420,7 @@ def main(args, resume_preempt=False):
             assert not np.isnan(loss), 'loss is nan'
 
         # -- Save Checkpoint after every epoch
-        logger.info('avg. loss %.3f' % loss_meter.avg)
+        # logger.info('avg. loss %.3f' % loss_meter.avg)
         save_checkpoint(epoch+1)
 
 
