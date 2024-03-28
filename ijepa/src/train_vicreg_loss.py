@@ -127,7 +127,7 @@ def main(args, resume_preempt=False):
     tag = args['logging']['write_tag']
 
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
-    directory_name = f"{folder}/run_{current_dateTime}"
+    directory_name = f"{folder}/{model_name}_run_{current_dateTime}"
     os.mkdir(directory_name)
     
     folder = directory_name
