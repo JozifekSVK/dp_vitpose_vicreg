@@ -1,11 +1,11 @@
 data:
-  batch_size: 128
+  batch_size: 256
   color_jitter_strength: 0.0
   crop_scale:
   - 0.3
   - 1.0
   crop_size: 224
-  image_folder: /train2017
+  image_folder: /coco/train2017
   num_workers: 4
   pin_mem: true
   root_path: /content/Dataset_dp
@@ -42,11 +42,11 @@ optimization:
   ema:
   - 0.996
   - 1.0
-  epochs: 350
+  epochs: 300
   final_lr: 1.0e-06
   final_weight_decay: 0.01
   ipe_scale: 1.0
-  lr: 0.0008
+  lr: 0.001
   start_lr: 0.0001
   warmup: 5
   weight_decay: 0.01

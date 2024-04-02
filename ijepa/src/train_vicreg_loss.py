@@ -339,7 +339,6 @@ def main(args, resume_preempt=False):
 
                     repr_loss = F.mse_loss(x, y)
 
-                
                     x = x - x.mean(dim=0)
                     y = y - y.mean(dim=0)
 
