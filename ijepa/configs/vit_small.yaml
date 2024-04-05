@@ -5,15 +5,15 @@ data:
   - 0.3
   - 1.0
   crop_size: 224
-  image_folder: /coco/train2017
+  image_folder: /tachyum/local/datasets/coco2017/train2017
   num_workers: 4
   pin_mem: true
-  root_path: /content/Dataset_dp
+  root_path: /tachyum/local/datasets/coco2017
   use_color_distortion: false
   use_gaussian_blur: false
   use_horizontal_flip: false
 logging:
-  folder: /content/dp_vitpose_vicreg/ijepa/logs
+  folder: /tachyum/local/mpechac/deployment/vitpose_vicreg/experiments_folder
   write_tag: jepa
 mask:
   allow_overlap: false
