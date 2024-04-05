@@ -37,7 +37,7 @@ meta:
   pred_depth: 12
   pred_emb_dim: 384
   read_checkpoint: null
-  use_bfloat16: true
+  use_bfloat16: false
 optimization:
   ema:
   - 0.996
@@ -46,7 +46,7 @@ optimization:
   final_lr: 1.0e-06
   final_weight_decay: 0.01
   ipe_scale: 1.0
-  lr: 0.001
+  lr: 0.0007
   start_lr: 0.0001
   warmup: 5
   weight_decay: 0.01
