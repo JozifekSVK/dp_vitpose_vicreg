@@ -165,7 +165,9 @@ def main(args, resume_preempt=False):
                            ('%.5f', 'mask-A'),
                            ('%.5f', 'mask-B'),
                            ('%d', 'time (ms)'),
-                           ('%.5f', 'lr')
+                           ('%.5f', 'lr'),
+                           ('%.5f', 'grad_norm_avg'),
+                           ('%.5f', 'grad_norm_std')
                            )
 
     # -- init model
@@ -275,6 +277,7 @@ def main(args, resume_preempt=False):
                 torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
 
     # -- TRAINING LOOP
+    training_loss = []
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch %d' % (epoch + 1))
 
@@ -285,6 +288,7 @@ def main(args, resume_preempt=False):
         maskA_meter = AverageMeter()
         maskB_meter = AverageMeter()
         time_meter = AverageMeter()
+        epoch_loss = []
 
         print(f"Epoch contains {len(unsupervised_loader)} batches")
         for itr, (udata, masks_enc, masks_pred) in enumerate(unsupervised_loader):
@@ -357,6 +361,19 @@ def main(args, resume_preempt=False):
                             + 25 * std_loss
                             + 1 * cov_loss
                     )
+
+                    if torch.isnan(loss):
+                      print("Loss is NaN")
+                      print(repr_loss)
+                      print(std_loss)
+                      print(std_x)
+                      print(std_y)
+                      print(cov_loss)
+                      print(cov_x)
+                      print(cov_y)
+                      print( off_diagonal(cov_x).pow_(2).sum().div(num_features) )
+                      print( off_diagonal(cov_y).pow_(2).sum().div(num_features) )
+
                     return loss
 
                 # Step 1. Forward
@@ -387,16 +404,19 @@ def main(args, resume_preempt=False):
             (loss, _new_lr, _new_wd, grad_stats), etime = gpu_timer(train_step)
             loss_meter.update(loss)
             time_meter.update(etime)
+            epoch_loss.append(loss)
 
             # -- Logging
             def log_stats():
-                csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime, _new_lr)
-                if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
+                csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime, _new_lr, grad_stats[0], grad_stats[1])
+                if (itr % log_freq == 0):
                     logger.info('[%d, %5d] loss: %.3f '
                                 'masks: %.1f %.1f '
                                 '[wd: %.2e] [lr: %.2e] '
                                 '[mem: %.2e] '
-                                '(%.1f ms)'
+                                '(%.1f ms) '
+                                'avg_grad_norm: %.3f '
+                                'std_grad_norm: %.3f '
                                 % (epoch + 1, itr,
                                    loss,
                                    maskA_meter.avg,
@@ -404,22 +424,18 @@ def main(args, resume_preempt=False):
                                    _new_wd,
                                    _new_lr,
                                    torch.cuda.max_memory_allocated() / 1024.**2,
-                                   time_meter.avg))
-
-                    if grad_stats is not None:
-                        logger.info('[%d, %5d] grad_stats: [%.2e %.2e] (%.2e, %.2e)'
-                                    % (epoch + 1, itr,
-                                       grad_stats.first_layer,
-                                       grad_stats.last_layer,
-                                       grad_stats.min,
-                                       grad_stats.max))
+                                   time_meter.avg,
+                                   grad_stats[0], 
+                                   grad_stats[1]
+                                   
+                                   ))
 
             log_stats()
 
             assert not np.isnan(loss), 'loss is nan'
 
         # -- Save Checkpoint after every epoch
-        # logger.info('avg. loss %.3f' % loss_meter.avg)
+        logger.info('Epoch avg. loss %.3f' % np.mean(epoch_loss))
         save_checkpoint(epoch+1)
 
 

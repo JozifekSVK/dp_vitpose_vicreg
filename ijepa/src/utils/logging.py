@@ -6,7 +6,7 @@
 #
 
 import torch
-
+import numpy as np
 
 def gpu_timer(closure, log_timings=True):
     """ Helper to time gpu-time to execute closure() """
@@ -76,17 +76,13 @@ class AverageMeter(object):
 
 
 def grad_logger(named_params):
-    stats = AverageMeter()
-    stats.first_layer = None
-    stats.last_layer = None
+    gradient_norms = []
     for n, p in named_params:
         if (p.grad is not None) and not (n.endswith('.bias') or len(p.shape) == 1):
             grad_norm = float(torch.norm(p.grad.data))
-            stats.update(grad_norm)
-            if 'qkv' in n:
-                stats.last_layer = grad_norm
-                if stats.first_layer is None:
-                    stats.first_layer = grad_norm
-    if stats.first_layer is None or stats.last_layer is None:
-        stats.first_layer = stats.last_layer = 0.
-    return stats
+            gradient_norms.append(grad_norm)
+
+    avg_grad = sum(gradient_norms) / len(gradient_norms) 
+    std_grad = np.std(gradient_norms)
+
+    return avg_grad, std_grad
