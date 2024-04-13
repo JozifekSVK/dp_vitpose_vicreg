@@ -37,7 +37,7 @@ def make_COCO(
   subset_file=None
 ):
   
-  dataset = CocoDetection('/content/Dataset_dp/train2017', '/content/Dataset_dp/annotations/person_keypoints_train2017.json', transform=transform)
+  dataset = CocoDetection(f'{root_path}{image_folder}', f'{root_path}/annotations/person_keypoints_train2017.json', transform=transform)
   logger.info('ImageNet dataset created')
 
 
