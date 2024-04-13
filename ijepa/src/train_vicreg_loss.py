@@ -245,7 +245,7 @@ def main(args, resume_preempt=False):
     if load_model:
         encoder, predictor, target_encoder, optimizer, scaler, start_epoch = load_checkpoint(
             device=device,
-            r_path=load_path,
+            r_path=load_model,
             encoder=encoder,
             predictor=predictor,
             target_encoder=target_encoder,
@@ -278,6 +278,10 @@ def main(args, resume_preempt=False):
 
     # -- TRAINING LOOP
     training_loss = []
+    clipping_value = 1 # arbitrary value of your choosing
+    torch.nn.utils.clip_grad_norm_(encoder.parameters(), clipping_value)
+    torch.nn.utils.clip_grad_norm_(predictor.parameters(), clipping_value)
+    torch.nn.utils.clip_grad_norm_(target_encoder.parameters(), clipping_value)
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch %d' % (epoch + 1))
 
@@ -301,6 +305,13 @@ def main(args, resume_preempt=False):
                 masks_2 = [u.to(device, non_blocking=True) for u in masks_pred]
                 return (imgs, masks_1, masks_2)
             imgs, masks_enc, masks_pred = load_imgs()
+
+            # imgs = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/imgs.pt')
+            # masks_enc = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_enc.pt')
+            # masks_pred = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_pred.pt')
+            # target_encoder = target_encoder.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/target_encoder.pt'))
+            # predictor = predictor.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/predictor.pt'))
+            # encoder = encoder.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/encoder.pt'))
             maskA_meter.update(len(masks_enc[0][0]))
             maskB_meter.update(len(masks_pred[0][0]))
 
@@ -363,6 +374,14 @@ def main(args, resume_preempt=False):
                     )
 
                     if torch.isnan(loss):
+                      torch.save(x, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/x.pt')
+                      torch.save(y, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/y.pt')
+                      torch.save(imgs, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/imgs.pt')
+                      torch.save(masks_enc, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_enc.pt')
+                      torch.save(masks_pred, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_pred.pt')
+                      torch.save(encoder.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/encoder.pt')
+                      torch.save(predictor.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/predictor.pt')
+                      torch.save(target_encoder.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/target_encoder.pt')
                       print("Loss is NaN")
                       print(repr_loss)
                       print(std_loss)
@@ -383,13 +402,10 @@ def main(args, resume_preempt=False):
                     loss = loss_fn(z, h)
 
                 #  Step 2. Backward & step
-                if use_bfloat16:
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    loss.backward()
-                    optimizer.step()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                
                 grad_stats = grad_logger(encoder.named_parameters())
                 optimizer.zero_grad()
 
@@ -415,8 +431,8 @@ def main(args, resume_preempt=False):
                                 '[wd: %.2e] [lr: %.2e] '
                                 '[mem: %.2e] '
                                 '(%.1f ms) '
-                                'avg_grad_norm: %.3f '
-                                'std_grad_norm: %.3f '
+                                'avg_grad_norm: %.6f '
+                                'std_grad_norm: %.6f '
                                 % (epoch + 1, itr,
                                    loss,
                                    maskA_meter.avg,
