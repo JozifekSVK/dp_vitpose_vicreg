@@ -206,7 +206,7 @@ def main(args):
     if args.no_projector == "True":
       directory_name = f"{pathname}/{args.base_lr}_no_projector_{current_dateTime}"
     else:
-      directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_{current_dateTime}"
+      directory_name = f"{pathname}/{args.base_lr}_{args.mlp}_patch_vicreg_{current_dateTime}"
     
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
@@ -302,10 +302,9 @@ def main(args):
                 model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
             )
-            # torch.save(state, directory_name + "/" + "model.pth")
+            torch.save(state, directory_name + "/" + "model.pth")
     if True:
-        # torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
-        pass
+        torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
