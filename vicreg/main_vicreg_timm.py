@@ -331,14 +331,14 @@ class VICReg(nn.Module):
         super().__init__()
         self.args = args
         # self.num_features = int(args.mlp.split("-")[-1])
-        self.embedding = 18816
+        self.embedding = 384
         # self.backbone = MaskedAutoencoderViT(
         #     patch_size=16, embed_dim=384, depth=12, num_heads=12,
         #     decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
         #     mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
         # )
         self.backbone = timm.create_model(
-            'vit_small_patch32_224',
+            'vit_small_patch16_224',
             pretrained=False,
             num_classes=0,  # remove classifier nn.Linear
             class_token=False,
@@ -374,12 +374,14 @@ class VICReg(nn.Module):
         y_ = self.backbone.forward_features(y)
 
         if args.no_projector == "True":
+          
           x = x_
           y = y_
         else:
-          x_ = torch.flatten(x_, start_dim=1)
-          y_ = torch.flatten(y_, start_dim=1)
-
+          
+          x_ = torch.reshape(x_, (-1, self.embedding))
+          y_ = torch.reshape(y_, (-1, self.embedding))
+          
           x = self.projector(x_)
           y = self.projector(y_)
 

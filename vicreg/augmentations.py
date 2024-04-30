@@ -36,12 +36,16 @@ class Solarization(object):
 
 class TrainTransform(object):
     def __init__(self):
-        self.transform = transforms.Compose(
+        self.transform_base = transforms.Compose(
             [
                 transforms.RandomResizedCrop(
                     224, interpolation=InterpolationMode.BICUBIC
                 ),
-                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomHorizontalFlip(p=0.5)
+            ]
+        )
+        self.transform = transforms.Compose(
+            [
                 transforms.RandomApply(
                     [
                         transforms.ColorJitter(
@@ -61,10 +65,6 @@ class TrainTransform(object):
         )
         self.transform_prime = transforms.Compose(
             [
-                transforms.RandomResizedCrop(
-                    224, interpolation=InterpolationMode.BICUBIC
-                ),
-                transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply(
                     [
                         transforms.ColorJitter(
@@ -84,6 +84,6 @@ class TrainTransform(object):
         )
 
     def __call__(self, sample):
-        x1 = self.transform(sample)
-        x2 = self.transform_prime(sample)
+        x1 = self.transform( self.transform_base(sample) )
+        x2 = self.transform_prime( self.transform_base(sample) )
         return x1, x2
