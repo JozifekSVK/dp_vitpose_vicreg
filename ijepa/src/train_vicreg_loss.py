@@ -277,16 +277,13 @@ def main(args, resume_preempt=False):
                 torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
 
     # -- TRAINING LOOP
-    training_loss = []
-    clipping_value = 1 # arbitrary value of your choosing
+    ### DP
+    clipping_value = 1 # Clipping gradients for stability
     torch.nn.utils.clip_grad_norm_(encoder.parameters(), clipping_value)
     torch.nn.utils.clip_grad_norm_(predictor.parameters(), clipping_value)
     torch.nn.utils.clip_grad_norm_(target_encoder.parameters(), clipping_value)
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch %d' % (epoch + 1))
-
-        # -- update distributed-data-loader epoch
-        # unsupervised_sampler.set_epoch(epoch)
 
         loss_meter = AverageMeter()
         maskA_meter = AverageMeter()
@@ -306,12 +303,6 @@ def main(args, resume_preempt=False):
                 return (imgs, masks_1, masks_2)
             imgs, masks_enc, masks_pred = load_imgs()
 
-            # imgs = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/imgs.pt')
-            # masks_enc = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_enc.pt')
-            # masks_pred = torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_pred.pt')
-            # target_encoder = target_encoder.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/target_encoder.pt'))
-            # predictor = predictor.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/predictor.pt'))
-            # encoder = encoder.load_state_dict(torch.load('/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/encoder.pt'))
             maskA_meter.update(len(masks_enc[0][0]))
             maskB_meter.update(len(masks_pred[0][0]))
 
@@ -322,7 +313,6 @@ def main(args, resume_preempt=False):
 
                 def forward_target():
                     with torch.no_grad():
-                        # print(imgs.shape)
                         h = target_encoder(imgs)
                         h = F.layer_norm(h, (h.size(-1),))  # normalize over feature-dim
                         B = len(h)
@@ -343,6 +333,7 @@ def main(args, resume_preempt=False):
                   return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
                 
                 def loss_fn(z, h):
+                    ### VICReg loss function
                     z = z.view(z.shape[0], -1)
                     h = h.view(h.shape[0], -1)
 
@@ -374,14 +365,8 @@ def main(args, resume_preempt=False):
                     )
 
                     if torch.isnan(loss):
-                      torch.save(x, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/x.pt')
-                      torch.save(y, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/y.pt')
-                      torch.save(imgs, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/imgs.pt')
-                      torch.save(masks_enc, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_enc.pt')
-                      torch.save(masks_pred, '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/masks_pred.pt')
-                      torch.save(encoder.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/encoder.pt')
-                      torch.save(predictor.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/predictor.pt')
-                      torch.save(target_encoder.state_dict(), '/content/drive/MyDrive/DP_pose_estimation/experiments_ijepa_vicreg/target_encoder.pt')
+                      ### Logging variables for debugging
+                      ### training i-jepa with VICReg had problems with NaN loss
                       print("Loss is NaN")
                       print(repr_loss)
                       print(std_loss)
@@ -410,6 +395,7 @@ def main(args, resume_preempt=False):
                 optimizer.zero_grad()
 
                 # Step 3. momentum update of target encoder
+                ### Updating every 5th iteration for better stability
                 if itr % 5 == 0:
                   with torch.no_grad():
                       m = next(momentum_scheduler)

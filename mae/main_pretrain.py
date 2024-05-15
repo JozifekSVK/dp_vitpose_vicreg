@@ -8,6 +8,10 @@
 # DeiT: https://github.com/facebookresearch/deit
 # BEiT: https://github.com/microsoft/unilm/tree/master/beit
 # --------------------------------------------------------
+
+### DP - file is mostly copy of original main_pretrained.py file
+### We changed the training dataset, original code was using Imagenet but we are
+### using MS COCO
 import argparse
 from datetime import datetime
 import json
@@ -20,14 +24,12 @@ from functools import partial
 
 import torch
 import torch.backends.cudnn as cudnn
-from torch import nn, optim
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 
 from ViT_model.models_mae import MaskedAutoencoderViT
 
-import timm
 
 # assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
@@ -277,10 +279,6 @@ def main(args):
                 log_writer.flush()
             with open(os.path.join(directory_name, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
-
-        # misc.save_model(
-        #     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-        #     loss_scaler=loss_scaler, epoch=epoch)
 
         torch.save(model.state_dict(), f"{directory_name}/mae_last_epoch.pth")
 

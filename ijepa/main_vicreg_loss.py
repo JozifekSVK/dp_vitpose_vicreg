@@ -3,8 +3,10 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
+### DP
+### This is copy of original main.py file, file is used for training model
+### through i-jepa algorithm with VICReg loss function
 import argparse
 
 import multiprocessing as mp

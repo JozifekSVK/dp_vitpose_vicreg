@@ -4,34 +4,26 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+### DP - this code is modified main_vicreg from from original paper
+### We added here more logs, loading model from timm, using MS COCO dataset, etc.
 from pathlib import Path
 import argparse
 import json
 import math
 import os
-import sys
 import time
-from functools import partial
 from datetime import datetime
 
 import timm
-from PIL import Image
 import torch
-from torch._C import _tracer_warn_use_python
 import torch.nn.functional as F
 from torch import nn, optim
 import torch.distributed as dist
-import torchvision.datasets as datasets
 from tqdm import tqdm
 import augmentations as aug
-from distributed import init_distributed_mode
 
 from statistics import mean, stdev
-
-from ViT_model.models_mae import MaskedAutoencoderViT
-
-import resnet
+from ms_coco import CocoDetection
 
 class Identity(nn.Module):
     def __init__(self):
@@ -39,64 +31,6 @@ class Identity(nn.Module):
         
     def forward(self, x):
         return x
-
-class CocoDetection(torch.utils.data.Dataset):
-    """`MS Coco Detection <http://mscoco.org/dataset/#detections-challenge2016>`_ Dataset.
-
-    Args:
-        root (string): Root directory where images are downloaded to.
-        annFile (string): Path to json annotation file.
-        transform (callable, optional): A function/transform that  takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.ToTensor``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
-    """
-
-    def __init__(self, root, annFile, transform=None, target_transform=None):
-        from pycocotools.coco import COCO
-        self.root = root
-        self.coco = COCO(annFile)
-        self.ids = list(self.coco.imgs.keys())
-        self.transform = transform
-        self.target_transform = target_transform
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: Tuple (image, target). target is the object returned by ``coco.loadAnns``.
-        """
-        coco = self.coco
-        img_id = self.ids[index]
-        ann_ids = coco.getAnnIds(imgIds=img_id)
-        target = coco.loadAnns(ann_ids)
-
-        path = coco.loadImgs(img_id)[0]['file_name']
-
-        img = Image.open(os.path.join(self.root, path)).convert('RGB')
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img
-
-    def __len__(self):
-        return len(self.ids)
-
-    def __repr__(self):
-        fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
-        fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
-        fmt_str += '    Root Location: {}\n'.format(self.root)
-        tmp = '    Transforms (if any): '
-        fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
-        tmp = '    Target Transforms (if any): '
-        fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
-        return fmt_str
-
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Pretrain a resnet model with VICReg", add_help=False)
@@ -156,20 +90,13 @@ def get_arguments():
 
 def main(args):
     torch.backends.cudnn.benchmark = True
-    # init_distributed_mode(args)
     print(args)
     gpu = torch.device(args.device, args.gpu)
-    # if args.rank == 0:
-    #     args.exp_dir.mkdir(parents=True, exist_ok=True)
-    #     stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
-    #     print(" ".join(sys.argv))
-    #     print(" ".join(sys.argv), file=stats_file)
 
     transforms = aug.TrainTransform()
 
     dataset = CocoDetection(str(args.data_dir) + '/train2017/', str(args.data_dir) + '/annotations/person_keypoints_train2017.json', transform=transforms)
 
-    # sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=True)
     assert args.batch_size % args.world_size == 0
     per_device_batch_size = args.batch_size // args.world_size
     loader = torch.utils.data.DataLoader(
@@ -178,28 +105,16 @@ def main(args):
         num_workers=args.num_workers,
         pin_memory=True,
         shuffle=False,
-        # sampler=sampler
     )
 
     model = VICReg(args).cuda(gpu)
 
-    # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-    # optimizer = LARS(
-    #     model.parameters(),
-    #     lr=args.base_lr,
-    #     weight_decay=args.wd,
-    #     weight_decay_filter=exclude_bias_and_norm,
-    #     lars_adaptation_filter=exclude_bias_and_norm,
-    # )
     optimizer = torch.optim.Adam(
       model.parameters(), 
       lr=args.base_lr,
-      weight_decay=args.wd,
-      # weight_decay_filter=exclude_bias_and_norm
+      weight_decay=args.wd
     )
 
-    # pathname = os.path.abspath(os.path.dirname(__file__))
     pathname = os.path.abspath(args.exp_dir)
     current_dateTime = str(datetime.now()).split('.')[0].replace(' ', '-')
     
@@ -210,15 +125,6 @@ def main(args):
     
     os.mkdir(directory_name)
     stats_file = open(f"{directory_name}/stats.txt", "a", buffering=1)
-    # if (args.exp_dir / "model.pth").is_file():
-
-    #     print("resuming from checkpoint")
-    #     ckpt = torch.load(args.exp_dir / "model.pth", map_location="cpu")
-    #     start_epoch = ckpt["epoch"]
-    #     model.load_state_dict(ckpt["model"])
-    #     optimizer.load_state_dict(ckpt["optimizer"])
-    # else:
-    #     start_epoch = 0
 
     start_epoch = 0
 
@@ -235,17 +141,13 @@ def main(args):
     start_time = last_logging = time.time()
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(start_epoch, args.epochs):
-        # sampler.set_epoch(epoch)
-        print(epoch)
-        # for step, ((x, y), _) in enumerate(tqdm(loader)):
+        print(f"Epoch - {epoch}")
         for value in enumerate(tqdm(loader)):
             step = value[0]
             x = value[1][0]
             y = value[1][1]
             x = x.cuda(gpu, non_blocking=True)
             y = y.cuda(gpu, non_blocking=True)
-
-            # lr = adjust_learning_rate(args, optimizer, loader, step)
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
@@ -295,22 +197,21 @@ def main(args):
         print(json.dumps(stats), file=stats_file)
 
         model.train()
-        ######################################
-        if True:
-            state = dict(
-                epoch=epoch + 1,
-                model=model.state_dict(),
-                optimizer=optimizer.state_dict(),
-            )
-            torch.save(state, directory_name + "/" + "model.pth")
-            torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
+
+        ### Saving model
+        state = dict(
+            epoch=epoch + 1,
+            model=model.state_dict(),
+            optimizer=optimizer.state_dict(),
+        )
+        torch.save(state, directory_name + "/" + "model.pth")
+        torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
 
     torch.save(model.backbone.state_dict(), directory_name + "/" + "backbone_trained.pth")
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
     max_steps = args.epochs * len(loader)
-    # warmup_steps = 10 * len(loader)
     warmup_steps = 100
     base_lr = args.base_lr * args.batch_size / 256
     if step < warmup_steps:
@@ -330,13 +231,7 @@ class VICReg(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        # self.num_features = int(args.mlp.split("-")[-1])
         self.embedding = 384
-        # self.backbone = MaskedAutoencoderViT(
-        #     patch_size=16, embed_dim=384, depth=12, num_heads=12,
-        #     decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        #     mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)
-        # )
         self.backbone = timm.create_model(
             'vit_small_patch16_224',
             pretrained=False,
@@ -344,30 +239,13 @@ class VICReg(nn.Module):
             class_token=False,
             global_pool='avg'
         )
-        # self.backbone.norm = Identity()
 
         if args.no_projector == "True":
           self.num_features = 2024
         else:
           self.num_features = int(args.mlp.split("-")[-1])
 
-        # self.backbone, self.embedding = resnet.__dict__[args.arch](
-        #     zero_init_residual=True
-        # )
-        # Print model's state_dict
-        # print("Model's state_dict:")
-        # for param_tensor in self.backbone.state_dict():
-        #     print(param_tensor, "\t", self.backbone.state_dict()[param_tensor].size())
-
-        # print()
-
         self.projector = Projector(args, self.embedding)
-
-        # print("Model's state_dict:")
-        # for param_tensor in self.projector.state_dict():
-        #     print(param_tensor, "\t", self.projector.state_dict()[param_tensor].size())
-
-        # print()
 
     def forward(self, x, y):
         x_ = self.backbone.forward_features(x)
@@ -387,8 +265,6 @@ class VICReg(nn.Module):
 
         repr_loss = F.mse_loss(x, y)
 
-        # x = torch.cat(x, dim=0)
-        # y = torch.cat(y, dim=0)
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0)
 

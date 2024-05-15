@@ -1,4 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+
+### DP - main file for running ViTPose model, this is mostly copy of original file
+### we added there same additional logs, etc.
 import argparse
 import copy
 import os
@@ -17,7 +20,6 @@ from mmpose.apis import init_random_seed, train_model
 from mmpose.datasets import build_dataset
 from mmpose.models import build_posenet
 from mmpose.utils import collect_env, get_root_logger, setup_multi_processes
-import mmcv_custom
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a pose model')
@@ -166,9 +168,6 @@ def main():
                 dash_line)
     meta['env_info'] = env_info
 
-    # log some basic info
-    # logger.info(f'Distributed training: {distributed}')
-    # logger.info(f'Config:\n{cfg.pretty_text}')
 
     # set random seeds
     seed = init_random_seed(args.seed)
@@ -183,6 +182,7 @@ def main():
       model_path = args.model_state_dict
       load_checkpoint(model, model_path, map_location=device_str)
     
+    ### Freezing backbone network
     for param in model.backbone.parameters():
       param.requires_grad = False
     

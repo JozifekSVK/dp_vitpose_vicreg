@@ -4,7 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-
+### DP - we have changed a bit transformation pipeline
+### we are firstly making cropping and flipping and just after that
+### we are running transformation as used in original VICReg paper.
 from PIL import ImageOps, ImageFilter
 import numpy as np
 import torchvision.transforms as transforms

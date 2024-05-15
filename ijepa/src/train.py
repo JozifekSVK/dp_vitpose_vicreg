@@ -267,7 +267,7 @@ def main(args, resume_preempt=False):
             'lr': lr
         }
         if rank == 0:
-            torch.save(encoder.state_dict(), "/content/dp_vitpose_vicreg/ijepa/logs/backbone_encoder.pth")
+            torch.save(encoder.state_dict(), f"{folder}/backbone_encoder.pth")
             torch.save(save_dict, latest_path)
             if (epoch + 1) % checkpoint_freq == 0:
                 torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
@@ -275,9 +275,6 @@ def main(args, resume_preempt=False):
     # -- TRAINING LOOP
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch %d' % (epoch + 1))
-
-        # -- update distributed-data-loader epoch
-        # unsupervised_sampler.set_epoch(epoch)
 
         loss_meter = AverageMeter()
         maskA_meter = AverageMeter()
@@ -305,7 +302,6 @@ def main(args, resume_preempt=False):
 
                 def forward_target():
                     with torch.no_grad():
-                        # print(imgs.shape)
                         h = target_encoder(imgs)
                         h = F.layer_norm(h, (h.size(-1),))  # normalize over feature-dim
                         B = len(h)
@@ -319,8 +315,6 @@ def main(args, resume_preempt=False):
                     z = predictor(z, masks_enc, masks_pred)
                     return z
 
-                ### Loss nahradit tak aby sme pouzili VICreg LOSS s tromi clenmi
-                ### 
                 def loss_fn(z, h): 
                     loss = F.smooth_l1_loss(z, h)
                     loss = AllReduce.apply(loss)
